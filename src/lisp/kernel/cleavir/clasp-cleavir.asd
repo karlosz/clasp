@@ -16,6 +16,7 @@
                :cleavir-ast-transformations
                :cleavir-kildall-type-inference
                :cleavir-escape
+               :cleavir-dominance
                :cleavir-hir-transformations
                :cleavir-partial-inlining
                :cleavir-remove-useless-instructions
@@ -45,6 +46,8 @@
                (:file "gml-drawing")
                (:file "landing-pad")
                ;;		 (:file "arguments")
+               (:file "ssa")
+               (:file "ssa-copyprop")
                (:file "closure-optimize")
                (:file "translate")
                (:file "translate-instruction")

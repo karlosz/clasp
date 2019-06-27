@@ -75,6 +75,24 @@
         (cmp:irc-store (in (elt inputs i)) (return-value-elt ret-regs i))))))
 
 (defmethod translate-simple-instruction
+    ((instruction cleavir-ir:phi-instruction) return-value (abi abi-x86-64) function-info)
+  (let* ((inputs (cleavir-ir:inputs instruction))
+         (basic-block (gethash instruction *instruction-basic-blocks*))
+         (output (first (cleavir-ir:outputs instruction)))
+         (predecessor-basic-blocks
+           (mapcar (lambda (pred)
+                     (gethash pred *instruction-basic-blocks*))
+                   (cleavir-ir:predecessors
+                    (cleavir-basic-blocks:first-instruction basic-block))))
+         (phi (cmp:irc-phi cmp:%t*% (length inputs) (datum-name-as-string output))))
+    (loop for input in inputs
+          for predecessor-basic-block in predecessor-basic-blocks
+          for predecessor-tag = (gethash (cleavir-basic-blocks:first-instruction predecessor-basic-block)
+                                         *tags*)
+          do (cmp:irc-phi-add-incoming phi (in input) predecessor-tag))
+    (out phi output)))
+
+(defmethod translate-simple-instruction
     ((instr cleavir-ir:multiple-to-fixed-instruction) return-value (abi abi-x86-64) function-info)
   ;; We put in a switch on the number of return values. There's one case for each output, plus one.
   ;; The blocks out of the switch branch to a final block which has a phi for each output.

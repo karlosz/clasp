@@ -43,6 +43,9 @@
    #:*code-walker*
    #:alloca-i8
    #:inline-ast
+   #:convert-ssa-form
+   #:aggressive-dead-phi-elimination
+   #:ssa-copy-propagation
 ))
 
 (defpackage #:cc-generate-ast)
