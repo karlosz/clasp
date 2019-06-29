@@ -66,7 +66,7 @@
                     (let* ((cleavir-ir:*policy* (cleavir-ir:policy (cleavir-basic-blocks:first-instruction y)))
                            (cleavir-ir:*dynamic-environment* (cleavir-ir:dynamic-environment (cleavir-basic-blocks:first-instruction y)))
                            (phi (cleavir-ir:make-phi-instruction
-                                 (make-list (length (cleavir-basic-blocks:predecessors y))
+                                 (make-list (length (cleavir-ir:predecessors (cleavir-basic-blocks:first-instruction y)))
                                             :initial-element variable)
                                  variable
                                  ;; if we have this set to (first y) then y has a
@@ -78,7 +78,8 @@
                       (setf (cleavir-basic-blocks:first-instruction y) phi)
                       (pushnew y (gethash variable phi-sites))
                       (unless (member y (gethash variable definition-sites))
-                        (pushnew y worklist)))))))))))))
+                        (pushnew y worklist)))))))))))
+    phi-sites))
 
 (defun delete-phi (instruction)
   (assert (= (length (cleavir-ir:successors instruction)) 1))
@@ -110,9 +111,14 @@
     (funcall function phi)))
 
 ;; rename variables after phi instructions have been inserted
-(defun ssa-rename-variables (variables basic-blocks)
-  (let ((stacks (make-hash-table :test #'eq)))
+(defun ssa-rename-variables (variables phi-sites basic-blocks)
+  (let ((stacks (make-hash-table :test #'eq))
+        (needs-renaming (make-hash-table :test #'eq)))
     (dolist (variable variables)
+      (when (and (or (gethash variable phi-sites)
+                     (rest (cleavir-ir:defining-instructions variable)))
+                 (typep variable 'cleavir-ir:lexical-location))
+        (setf (gethash variable needs-renaming) t))
       (push (cleavir-ir:make-lexical-location (gensym "SSA"))
             (gethash variable stacks)))
     (labels ((rename (basic-block dominance-tree children &aux old-defs)
@@ -121,13 +127,13 @@
                   (unless (typep i 'cleavir-ir:phi-instruction)
                     ;; substitute each use
                     (dolist (input (cleavir-ir:inputs i))
-                      (when (typep input 'cleavir-ir:lexical-location)
+                      (when (gethash input needs-renaming)
                         (setf (cleavir-ir:inputs i)
                               (substitute (first (gethash input stacks))
                                           input
                                           (cleavir-ir:inputs i))))))
                   (dolist (output (cleavir-ir:outputs i))
-                    (when (typep output 'cleavir-ir:lexical-location)
+                    (when (gethash output needs-renaming)
                       (let ((new (cleavir-ir:make-lexical-location (gensym "SSA"))))
                         (push output old-defs)
                         (push new (gethash output stacks))
@@ -144,6 +150,8 @@
                    (cleavir-basic-blocks:map-basic-block-instructions
                     (lambda (i)
                       (when (typep i 'cleavir-ir:phi-instruction)
+                        ; (print (cleavir-ir:inputs i))
+                        ; (print (cleavir-ir:predecessors (cleavir-basic-blocks:first-instruction y)))
                         (let ((variable (nth j (cleavir-ir:inputs i))))
                           (setf (nth j (cleavir-ir:inputs i))
                                 (first (gethash variable stacks))))))
@@ -164,8 +172,7 @@
 (defun convert-ssa-form (enter-instruction)
   (let ((variables (data-of-type enter-instruction 'cleavir-ir:lexical-location))
         (basic-blocks (cleavir-basic-blocks:basic-blocks enter-instruction)))
-    (place-phi-functions variables basic-blocks)
-    (ssa-rename-variables variables basic-blocks))
+    (ssa-rename-variables variables (place-phi-functions variables basic-blocks) basic-blocks))
   (cleavir-ir:reinitialize-data enter-instruction))
 
 ;; Sometimes, we get cycles of phi nodes. Aggressively eliminate them.

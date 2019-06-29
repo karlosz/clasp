@@ -42,6 +42,45 @@
        (return-from ,(core:function-block-name name) ,(second lambda-list)))
      ,@body))
 
+(setf *debug-cleavir* t)
+(setf cmp:*optimization-level* 0)
+(print "before test is compiled")
+
+(defun f (x) x)
+
+(disassemble #'f)
+
+(print (f 4))
+
+(disassemble '(lambda (num)
+  (let ((z 0)
+        (p1 1)
+        (p2 1))
+    (dotimes (i (- num 2))
+      (setf z (+ p1 p2)
+            p2 p1
+            p1 z))
+    z))
+             :type :ir)
+
+(defun test (num)
+  (let ((z 0)
+        (p1 1)
+        (p2 1))
+    (dotimes (i (- num 2))
+      (setf z (+ p1 p2)
+            p2 p1
+            p1 z))
+    z))
+
+(print "after")
+
+(disassemble #'test)
+
+(print (test 9))
+
+(print "done printing val")
+
 (progn
   (debug-inline "eq")
   (declaim (inline cl:eq))
