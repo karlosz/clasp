@@ -44,7 +44,14 @@
 
 (setf *debug-cleavir* t)
 (setf cmp:*optimization-level* 0)
+(setq cmp::*use-human-readable-bitcode* t)
+
 (print "before test is compiled")
+
+(clasp-cleavir:cleavir-compile-file "/home/charliezhang/clasp/src/lisp/kernel/cleavir/test.lisp")
+
+(disassemble '(lambda (x) (+ 4000 (if (= x 1) (progn (let ((z x)) (print z) (setq z 1))) x)))
+             :type :ir)
 
 (defun f (x) x)
 

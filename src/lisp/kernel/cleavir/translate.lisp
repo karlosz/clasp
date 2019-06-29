@@ -141,7 +141,7 @@ when this is t a lot of graphs will be generated.")
 (defvar *ownerships*)
 (defvar *tags*)
 
-(defun layout-basic-block (basic-block return-value abi current-function-info)
+(defun layout-basic-block (basic-block return-value abi current-function-info exit-tag)
   (with-accessors ((first cleavir-basic-blocks:first-instruction)
                    (last cleavir-basic-blocks:last-instruction)
                    (owner cleavir-basic-blocks:owner))
@@ -158,15 +158,19 @@ when this is t a lot of graphs will be generated.")
             ;; finish off the block
             do (let* ((successors (cleavir-ir:successors instruction))
                       (successor-tags (loop for successor in successors
-                                            collect (gethash successor *tags*))))
+                                            collect (car (gethash successor *tags*)))))
                  (cc-dbg-when *Debug-log* (format *debug-log* "     ~a~%" (cc-mir:describe-mir last)))
                  (cond ((= (length successors) 1)
                         ;; one successor: we have to do branching ourselves.
                         (translate-simple-instruction
                          instruction return-value abi current-function-info)
                         (cmp:with-debug-info-source-position ((ensure-origin (cleavir-ir:origin instruction) 999981))
-                          (cmp:irc-br (first successor-tags))))
+                          (cmp:irc-br exit-tag))
+                        (cmp:irc-begin-block exit-tag)
+                        (cmp:irc-br (first successor-tags)))
                        (t ; 0 or 2 or more successors: it handles branching.
+                        (cmp:irc-br exit-tag)
+                        (cmp:irc-begin-block exit-tag)
                         (translate-branch-instruction
                          instruction return-value successor-tags
                          abi current-function-info))))
@@ -198,6 +202,7 @@ when this is t a lot of graphs will be generated.")
 
 (defun layout-procedure* (the-function body-irbuilder
                           body-block
+                          body-exit-block
                           first-basic-block
                           rest-basic-blocks
                           function-info
@@ -214,12 +219,14 @@ when this is t a lot of graphs will be generated.")
             (cmp:irc-set-insert-point-basic-block body-block body-irbuilder)
             (with-catch-pad-prep
                 (cmp:irc-begin-block body-block)
-              (layout-basic-block first-basic-block return-value abi function-info)
+              (layout-basic-block first-basic-block return-value abi function-info body-exit-block)
               (loop for block in rest-basic-blocks
                     for instruction = (cleavir-basic-blocks:first-instruction block)
-                    do (cmp:with-debug-info-source-position ((ensure-origin (cleavir-ir:origin instruction) 999983))
-                         (cmp:irc-begin-block (gethash instruction *tags*)))
-                       (layout-basic-block block return-value abi function-info)))
+                    do (destructuring-bind (start-tag . exit-tag)
+                           (gethash instruction *tags*)
+                         (cmp:with-debug-info-source-position ((ensure-origin (cleavir-ir:origin instruction) 999983))
+                           (cmp:irc-begin-block start-tag))
+                         (layout-basic-block block return-value abi function-info exit-tag))))
             ;; finish up by jumping from the entry block to the body block
             (cmp:with-irbuilder (cmp:*irbuilder-function-alloca*)
               (cmp:with-debug-info-source-position ((ensure-origin (cleavir-ir:origin initial-instruction) 999985))
@@ -320,6 +327,7 @@ when this is t a lot of graphs will be generated.")
              (cmp:*irbuilder-function-alloca* (llvm-sys:make-irbuilder cmp:*llvm-context*))
              (body-irbuilder (llvm-sys:make-irbuilder cmp:*llvm-context*))
              (body-block (cmp:irc-basic-block-create "body"))
+             (body-exit-block (cmp:irc-basic-block-create "body-exit"))
              ;; The following was drawn from setup-function-scope-metadata to get the lineno
              (instruction (enter-instruction function-info))
              (source-pos-info (instruction-source-pos-info instruction))
@@ -341,7 +349,9 @@ when this is t a lot of graphs will be generated.")
           ;; create a basic-block for every remaining tag
           (loop for block in rest-basic-blocks
                 for instruction = (cleavir-basic-blocks:first-instruction block)
-                do (setf (gethash instruction *tags*) (cmp:irc-basic-block-create "tag")))
+                do (setf (gethash instruction *tags*)
+                         (cons (cmp:irc-basic-block-create "tag-start")
+                               (cmp:irc-basic-block-create "tag-exit"))))
           (cmp:irc-set-insert-point-basic-block entry-block cmp:*irbuilder-function-alloca*)
           ;; Generate code to get the arguments into registers.
           ;; (Actual lambda list stuff is covered by ENTER-INSTRUCTION.)
@@ -359,6 +369,7 @@ when this is t a lot of graphs will be generated.")
               (layout-procedure* the-function
                                  body-irbuilder
                                  body-block
+                                 body-exit-block
                                  first-basic-block
                                  rest-basic-blocks
                                  function-info

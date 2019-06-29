@@ -62,7 +62,7 @@
                        (error "Duplicated ID!"))
                   collect jump-id into used-ids
                   |#
-                  do (let ((tag-block (gethash dest tags)))
+                  do (let ((tag-block (car (gethash dest tags))))
                        (assert (not (null tag-block)))
                        (llvm-sys:add-case sw (%size_t jump-id) tag-block)))
             (cmp:irc-begin-block default-block)

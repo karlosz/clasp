@@ -85,11 +85,12 @@
                    (cleavir-ir:predecessors
                     (cleavir-basic-blocks:first-instruction basic-block))))
          (phi (cmp:irc-phi cmp:%t*% (length inputs) (datum-name-as-string output))))
+    (assert (> (length predecessor-basic-blocks) 1))
     (loop for input in inputs
           for predecessor-basic-block in predecessor-basic-blocks
-          for predecessor-tag = (gethash (cleavir-basic-blocks:first-instruction predecessor-basic-block)
-                                         *tags*)
-          do (cmp:irc-phi-add-incoming phi (in input) predecessor-tag))
+          for predecessor-exit-tag = (cdr (gethash (cleavir-basic-blocks:first-instruction predecessor-basic-block)
+                                                   *tags*))
+          do (cmp:irc-phi-add-incoming phi (in input) predecessor-exit-tag))
     (out phi output)))
 
 (defmethod translate-simple-instruction
