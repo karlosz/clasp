@@ -84,13 +84,18 @@
                      (gethash pred *instruction-basic-blocks*))
                    (cleavir-ir:predecessors
                     (cleavir-basic-blocks:first-instruction basic-block))))
+         ;; 0 because preds will be added later
          (phi (cmp:irc-phi cmp:%t*% (length inputs) (datum-name-as-string output))))
-    (assert (> (length predecessor-basic-blocks) 1))
-    (loop for input in inputs
-          for predecessor-basic-block in predecessor-basic-blocks
-          for predecessor-exit-tag = (cdr (gethash (cleavir-basic-blocks:first-instruction predecessor-basic-block)
-                                                   *tags*))
-          do (cmp:irc-phi-add-incoming phi (in input) predecessor-exit-tag))
+    ;; FIXME bclasp miscompiles lambdas so the lambda needs to capture
+    ;; the whole loop, rather than allocating a new closure in the
+    ;; loop.
+    (push (lambda ()
+            (loop for input in inputs
+                  for predecessor-basic-block in predecessor-basic-blocks
+                  for predecessor-exit-tag = (cdr (gethash (cleavir-basic-blocks:first-instruction predecessor-basic-block)
+                                                           *tags*))
+                  do (cmp:irc-phi-add-incoming phi (in input) predecessor-exit-tag)))
+          *local-fixups*)
     (out phi output)))
 
 (defmethod translate-simple-instruction

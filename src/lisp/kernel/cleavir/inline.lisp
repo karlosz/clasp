@@ -45,30 +45,19 @@
 (setf *debug-cleavir* t)
 (setf cmp:*optimization-level* 0)
 (setq cmp::*use-human-readable-bitcode* t)
+(setq cmp:*compile-debug-dump-module* t)
+(setq cmp:*compile-file-debug-dump-module* t)
+(setq clasp-cleavir:*debug-cleavir* t)
 
 (print "before test is compiled")
 
 (clasp-cleavir:cleavir-compile-file "/home/charliezhang/clasp/src/lisp/kernel/cleavir/test.lisp")
-
-(disassemble '(lambda (x) (+ 4000 (if (= x 1) (progn (let ((z x)) (print z) (setq z 1))) x)))
-             :type :ir)
 
 (defun f (x) x)
 
 (disassemble #'f)
 
 (print (f 4))
-
-(disassemble '(lambda (num)
-  (let ((z 0)
-        (p1 1)
-        (p2 1))
-    (dotimes (i (- num 2))
-      (setf z (+ p1 p2)
-            p2 p1
-            p1 z))
-    z))
-             :type :ir)
 
 (defun test (num)
   (let ((z 0)
