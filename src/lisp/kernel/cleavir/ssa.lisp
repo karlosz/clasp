@@ -236,3 +236,26 @@
        (last nil instruction))
       ((not (typep instruction 'cleavir-ir:phi-instruction))
        (or last start))))
+
+;;;; An edge split graph is one where a node succeeding anode with
+;;;; more than one successor cannot have more than one predecessor.
+(defun edge-split-graph (enter-instruction)
+  (cleavir-ir:map-instructions-arbitrary-order
+   (lambda (instruction)
+     (when (rest (cleavir-ir:predecessors instruction))
+       (dolist (predecessor (cleavir-ir:predecessors instruction))
+         (cleavir-ir:insert-instruction-between
+          (make-instance 'cleavir-ir:nop-instruction
+                         :policy (cleavir-ir:policy predecessor)
+                         :dynamic-environment (cleavir-ir:dynamic-environment predecessor))
+          predecessor
+          instruction))))
+   enter-instruction))
+
+(defun verify-edge-split-graph (enter-instruction)
+  (cleavir-ir:map-instructions-arbitrary-order
+   (lambda (instruction)
+     (when (rest (cleavir-ir:predecessors instruction))
+       (dolist (predecessor (cleavir-ir:predecessors instruction))
+         (assert (null (rest (cleavir-ir:successors predecessor)))))))
+   enter-instruction))

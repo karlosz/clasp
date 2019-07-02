@@ -95,6 +95,9 @@
                nil))
           (t nil))))
 
+
+(print "inline 99")
+
 #+(or)
 (progn
   ;; Really want a bit-vector-equal intrinsic here.
@@ -161,6 +164,9 @@
     ;; preserve nontoplevelness
     (the t object)))
 
+
+(print "inline 168")
+
 ;;; Type predicates.
 (macrolet ((defpred (name type)
              ;; We have to be careful about recursion - if one of these ended up
@@ -226,6 +232,8 @@
       ;; streamp stream ; no good as it's an extensible class... FIXME do it anyway?
       compiled-function-p compiled-function))
 
+(print "inline 229")
+
 (progn
   (debug-inline "null")
   (declaim (inline cl:null))
@@ -261,6 +269,9 @@
         (if (null x)
             nil
             (error 'type-error :datum x :expected-type 'list)))))
+
+
+(print "inline 274")
 
 (defmacro defcr (name &rest ops)
   `(progn
@@ -315,6 +326,9 @@
 (defcr tenth   car cdr cdr cdr cdr cdr cdr cdr cdr cdr)
 
 (debug-inline "rplaca")
+
+
+(print "inline 331")
 
 (progn
   (declaim (inline cl:rplaca))
@@ -414,6 +428,7 @@
   (defcomparison primop:inlined-two-arg->=
     cleavir-primop:fixnum-not-less    cleavir-primop:float-not-less    core:two-arg->=))
 
+(print "inline 431")
 (eval-when (:compile-toplevel :load-toplevel :execute)
   (define-cleavir-compiler-macro + (&whole form &rest numbers)
     (core:expand-associative '+ 'primop:inlined-two-arg-+ numbers 0))
@@ -458,6 +473,7 @@
   (declaim (inline minusp))
   (defun minusp (number) (< number 0)))
 
+(print "inline 476")
 ;;; ------------------------------------------------------------
 ;;;
 ;;; Array functions
@@ -491,6 +507,7 @@
          (core::%array-dimension array axis-number)
          (error "Invalid axis number ~d for array of rank ~d" axis-number (core::%array-rank array))))))
 
+(print "inline 510")
 ;; Unsafe version for array-row-major-index
 (debug-inline "%array-dimension")
 (declaim (inline %array-dimension))
@@ -534,6 +551,7 @@
           (error 'type-error :datum index :expected-type 'fixnum))
       (error 'type-error :datum vector :expected-type 'simple-vector)))
 
+(print "inline 554")
 (declaim (inline (setf svref/no-bounds-check)))
 (defun (setf svref/no-bounds-check) (value vector index)
   (if (typep vector 'simple-vector)
@@ -553,6 +571,7 @@
       whole
       `(funcall #'(setf svref/no-bounds-check) ,value ,vector ,index)))
 
+(print "inline 574")
 (debug-inline "%unsafe-vector-ref")
 (declaim (inline %unsafe-vector-ref))
 (defun %unsafe-vector-ref (array index)
@@ -574,6 +593,8 @@
             (ext:byte64 nil) (ext:byte32 nil)
             (ext:byte16 nil) (ext:byte8 nil)
             (bit t))))
+
+(print "inline 597")
 
 ;;; This is "unsafe" in that it doesn't bounds check.
 ;;; It DOES check that the value is of the correct type,
@@ -599,6 +620,7 @@
             (ext:byte16 nil) (ext:byte8 nil)
             (bit t))))
 
+(print "inline 621")
 ;;; If the array has a fill-pointer, this might be wrong, at least when called from elt
 ;;; (elt (make-array 10 :initial-contents '(0 1 2 3 4 5 6 7 8 9) :fill-pointer 3) 5)
 ;;; sbcl -> The index 5 is too large, but no error in clasp
@@ -626,7 +648,10 @@
 ;;; (Used in this file only)
 (defmacro add-indices (a b)
   `(cleavir-primop:let-uninitialized (z)
-     (if (cleavir-primop:fixnum-add ,a ,b z) z z)))
+                                     (if (cleavir-primop:fixnum-add ,a ,b z) z z)))
+
+
+(print "inline 652")
 
 ;; FIXME: This could be a function returning two values. But that's
 ;; quite inefficient at the moment.
@@ -721,6 +746,7 @@
                                        :array array)))
   (row-major-aset/no-bounds-check array index value))
 
+(print "inline 747")
 (declaim (inline schar (setf schar) char (setf char)))
 (defun schar (string index)
   (row-major-aref (the simple-string string) index))
@@ -801,6 +827,7 @@
              ;; Now we know we're good, do the actual computation
              ,(row-major-index-computer sarray dimsyms ssubscripts))))))
 
+(print "inline 828")
 (define-cleavir-compiler-macro aref (&whole form array &rest subscripts)
   ;; FIXME: See tragic comment above in array-row-major-index.
   (if (> (length subscripts) 1)
@@ -823,6 +850,7 @@
            (with-array-data (data offset ,sarray)
              (%unsafe-vector-set data (add-indices offset rmi) ,new))))))
 
+(print "inline 850")
 ;;; ------------------------------------------------------------
 ;;;
 ;;; Sequence functions
@@ -895,6 +923,7 @@
     (function fdesignator)
     (symbol (fdefinition fdesignator))))
 
+(print "inline 923")
 ;;; ------------------------------------------------------------
 ;;;
 ;;;  Copied from clasp/src/lisp/kernel/lsp/pprint.lsp
@@ -1020,3 +1049,6 @@
   (if (null vars)
       `(values ,form)
       `(values (setf (values ,@vars) ,form))))
+
+
+(print "inline 1051 - end")

@@ -116,7 +116,8 @@ when this is t a lot of graphs will be generated.")
   (cond
     ((typep datum 'cleavir-ir:immediate-input)
      (cmp:irc-int-to-ptr (%i64 (cleavir-ir:value datum)) cmp:%t*%))
-    ((typep datum 'cleavir-ir:lexical-location)
+    ((typep datum '(or cleavir-ir:lexical-location
+                    dynamic-environment-location))
      (let ((alloca (datum-alloca datum)))
        (if (null alloca)
            (or (datum-variable datum)
@@ -468,7 +469,17 @@ when this is t a lot of graphs will be generated.")
               for count-class in sorted-instr-count-list
               when count-class
                 do (sys:monitor-message "instr-miss-origin-class-count ~a ~a" (car count-class) (cdr count-class)))))))
-    
+
+(defclass dynamic-environment-location (cleavir-ir:datum)
+  ((%name :initarg :name :accessor cleavir-ir:name)))
+
+(defmethod cleavir-ir-graphviz:draw-datum ((datum dynamic-environment-location) stream)
+  (format stream "  ~a [shape = ellipse, style = filled];~%"
+	  (cleavir-ir-graphviz:datum-id datum))
+  (format stream "   ~a [fillcolor = green, label = \"~a\"]~%"
+	  (cleavir-ir-graphviz:datum-id datum)
+          (cleavir-ir:name datum)))
+
 (defun my-hir-transformations (init-instr system env)
   ;; FIXME: Per Cleavir rules, we shouldn't need the environment at this point.
   ;; We do anyway because of the possibility that a load-time-value input is introduced
@@ -489,13 +500,14 @@ when this is t a lot of graphs will be generated.")
   (cleavir-kildall-type-inference:thes->typeqs init-instr clasp-cleavir:*clasp-env*)
   (quick-draw-hir init-instr "hir-after-thes-typeqs")
   (setf *ct-thes->typeqs* (compiler-timer-elapsed))
-  
-  (cleavir-ir:reinitialize-data init-instr)
-  (cleavir-ir:set-predecessors init-instr)
-  (clasp-cleavir:convert-ssa-form init-instr)
-  (cleavir-remove-useless-instructions:remove-useless-instructions init-instr)
-  (clasp-cleavir:aggressive-dead-phi-elimination init-instr)
-  (cleavir-remove-useless-instructions:remove-useless-instructions init-instr)
+  (dolist (instruction (cleavir-ir:instructions-of-type init-instr '(or cleavir-ir:catch-instruction
+                                                                     cleavir-ir:enter-instruction)))
+    (let ((dynenv (if (typep instruction 'cleavir-ir:enter-instruction)
+                      (cleavir-ir:dynamic-environment-output instruction)
+                      (second (cleavir-ir:outputs instruction)))))
+      (change-class dynenv
+                    'dynamic-environment-location
+                    :name (cleavir-ir:name dynenv))))
   ;;; See comment in policy.lisp. tl;dr these analyses are slow.
   #+(or)
   (let ((do-dx (policy-anywhere-p init-instr 'do-dx-analysis))
@@ -514,10 +526,16 @@ when this is t a lot of graphs will be generated.")
                                                       :draw (quick-hir-pathname "hir-before-prune-ti"))
           (quick-draw-hir init-instr "hir-after-ti")
           (setf *ct-infer-types* (compiler-timer-elapsed))))))
-
   (cleavir-hir-transformations:eliminate-catches init-instr)
-  #+nil
+  (cleavir-ir:reinitialize-data init-instr)
+  (cleavir-ir:set-predecessors init-instr)
+  (clasp-cleavir:convert-ssa-form init-instr)
+  (quick-draw-hir init-instr "hir-after-ssa")
+  (cleavir-remove-useless-instructions:remove-useless-instructions init-instr)
+  (clasp-cleavir:aggressive-dead-phi-elimination init-instr)
+  (cleavir-remove-useless-instructions:remove-useless-instructions init-instr)
   (clasp-cleavir:ssa-copy-propagation init-instr)
+  (quick-draw-hir init-instr "hir-after-ssa-dce")
   ;; delete the-instruction and the-values-instruction
   (cleavir-kildall-type-inference:delete-the init-instr)
   (setf *ct-delete-the* (compiler-timer-elapsed))
@@ -528,6 +546,12 @@ when this is t a lot of graphs will be generated.")
   (clasp-cleavir::eliminate-load-time-value-inputs init-instr system env)
   (quick-draw-hir init-instr "hir-after-eliminate-load-time-value-inputs")
   (setf *ct-eliminate-load-time-value-inputs* (compiler-timer-elapsed))
+  ;; need this pass to make sure multi successor instructions which
+  ;; create their own llvm basic blocks don't need their exit blocks
+  ;; recorded precisely, because we prevent merge points from
+  ;; interacting with multisuccessor instructions.
+  (clasp-cleavir::edge-split-graph init-instr)
+  (quick-draw-hir init-instr "hir-after-edge-split")
   #+debug-monitor(monitor-instructions-with-origins init-instr)
   #+(or)
   (cleavir-remove-useless-instructions:remove-useless-instructions init-instr)
