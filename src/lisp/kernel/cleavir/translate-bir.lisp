@@ -1007,7 +1007,8 @@
       (layout-procedure function (get-or-create-lambda-name function)
                         abi :linkage linkage))))
 
-(defun translate (bir &key abi linkage)
+(defun translate (bir &key (abi clasp-cleavir::*abi-x86-64*)
+                           (linkage 'llvm-sys:internal-linkage))
   (let* ((*unwind-ids* (make-hash-table :test #'eq))
          (*function-info* (make-hash-table :test #'eq))
          (*constant-values* (make-hash-table :test #'eq)))
@@ -1032,15 +1033,13 @@
   (cleavir-bir-transformations:process-captured-variables module)
   (values))
 
-(defun translate-ast (ast &key (abi clasp-cleavir::*abi-x86-64*)
-                               (linkage 'llvm-sys:internal-linkage)
-                               (system clasp-cleavir::*clasp-system*))
+(defun translate-ast (ast &key (system clasp-cleavir::*clasp-system*))
   (let* ((bir (ast->bir ast system))
          (module (cleavir-bir:module bir)))
     ;;(cleavir-bir:verify module)
     (bir-transformations module)
     (cleavir-bir:verify module)
-    (translate bir :abi abi :linkage linkage)))
+    bir))
 
 (defun bir-compile (form env pathname
                     &key (linkage 'llvm-sys:internal-linkage))
@@ -1048,11 +1047,12 @@
          ordered-raw-constants-list constants-table startup-fn shutdown-fn
          (cleavir-cst-to-ast:*compiler* 'cl:compile)
          (cst (cst:cst-from-expression form))
-         (ast (clasp-cleavir::cst->ast cst env)))
+         (ast (clasp-cleavir::cst->ast cst env))
+         (bir (translate-ast cst env)))
     (cmp:with-debug-info-generator (:module cmp:*the-module* :pathname pathname)
       (multiple-value-setq (ordered-raw-constants-list constants-table startup-fn shutdown-fn)
-        (literal:with-rtv
-            (setq function (translate-ast ast)))))
+          (literal:with-rtv
+              (setq function (translate bir :linkage linkage)))))
     (unless function
       (error "There was no function returned by translate-ast"))
     ;;(llvm-sys:dump-module cmp:*the-module* *standard-output*)
@@ -1069,8 +1069,9 @@
   (let ((cmp:*default-condition-origin* (origin-spi (cst:source cst))))
     (literal:with-top-level-form
         (let* ((pre-ast (clasp-cleavir::cst->ast cst env))
-               (ast (clasp-cleavir::wrap-ast pre-ast)))
-          (translate-ast ast :linkage cmp:*default-linkage*)))))
+               (ast (clasp-cleavir::wrap-ast pre-ast))
+               (bir (translate-ast ast)))
+          (translate bir :linkage cmp:*default-linkage*)))))
 
 (defun bir-loop-read-and-compile-file-forms (source-sin environment)
   (let ((eof-value (gensym))

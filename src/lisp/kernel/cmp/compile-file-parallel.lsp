@@ -74,7 +74,8 @@
   (values))
 
 (defun ast-job-to-module (job &key optimize optimize-level)
-  (let ((module (cmp::llvm-create-module (format nil "module~a" (ast-job-form-index job))))
+  (let ((bir (clasp-cleavir-translate-bir::translate-ast (ast-job-ast job)))
+        (module (cmp::llvm-create-module (format nil "module~a" (ast-job-form-index job))))
         (core:*current-source-pos-info* (ast-job-current-source-pos-info job)))
     (with-module (:module module
                   :optimize (when optimize #'optimize-module-for-compile-file)
@@ -85,8 +86,7 @@
           (with-literal-table
               (core:with-memory-ramp (:pattern 'gctools:ramp)
                 (literal:with-top-level-form
-                    (let ((ast (ast-job-ast job)))
-                      (clasp-cleavir-translate-bir::translate-ast ast)))))
+                  (clasp-cleavir-translate-bir::translate bir))))
           (let ((startup-function (add-global-ctor-function module run-all-function
                                                             :position (ast-job-form-counter job))))
 ;;;                (add-llvm.used module startup-function)
